@@ -43,7 +43,8 @@ page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 
 await page.goto(page0 + '#/board');
-const detailSlug = process.env.DETAIL_SLUG || (await page.evaluate(() => window.Radar.build(window.SNAPSHOT).rows.find((r) => r.segment === 'watchlist').slug));
+// The detail capture shows the board's top risk curator: a protocol whose farm plan is a plain vault deposit.
+const detailSlug = process.env.DETAIL_SLUG || 'steakhouse-financial';
 SHOTS[1][1] = '#/p/' + encodeURIComponent(detailSlug);
 
 mkdirSync(shotDir, { recursive: true });

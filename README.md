@@ -23,16 +23,29 @@
 One plain-JavaScript file holds the whole model and the farm plans. `main.ts` imports it to write `board.json`, and the dashboard runs the same file on the same snapshot in the browser, so the page, the screenshots and the board cannot disagree.
 
 ```
-implied = 10^(a + b·log10 TVL) × sector × category × momentum × runway
+implied = 10^(a + b·log10 TVL + sector) × momentum × runway
 ```
 
-1. **Size curve.** Least squares of log market cap on log TVL over the 128 protocols whose token trades with a positive market cap: a = 3.025, b = 0.522 (R² 0.19). A slope under 1 is what the peers show: a bigger TVL earns a smaller multiple, so a $2.75B curator is not worth 250 times a $11M one.
-2. **Sector and category.** The peers' mean residual by sector (7 sectors grouping DefiLlama's categories), then by category inside the sector, each shrunk by n/(n+4) so a category with a single peer moves the value by a fifth of its gap, not all of it.
+1. **Size curve.** Least squares of log market cap on log TVL over the 128 protocols whose token trades with a positive market cap: a = 3.025, b = 0.522 (R² 0.19). A slope under 1 is what the peers show: a bigger TVL earns a smaller multiple, so a $2.75B curator is not worth 250 times an $11M one.
+2. **Sector.** The peers' mean residual in the protocol's sector (7 sectors grouping DefiLlama's categories), shrunk by n/(n+k). k = 8 is chosen from 0, 1, 2, 4, 8, 16 and 32 as the value with the lowest leave-one-out error.
 3. **Momentum.** The protocol's 7-day TVL change minus the snapshot's median change (−8.2% that week), capped at ±30 points, at elasticity 0.5: a week is a noisy signal, so it nudges the value rather than sets it.
 4. **Runway.** Days DefiLlama has tracked it with no token: factor 0.7 for a new listing rising on a log curve to 1.0 at two years. TVL that stayed without a token is less likely to be points-only capital. An unknown date takes the midpoint.
-5. **Band.** ±0.674σ of the sector's residuals around the value: the middle half of where a trading peer of that size sits.
+5. **Band.** The 25th to 75th percentile of the held-out misses (×0.32 to ×3.31): half of the peers the fit never saw land inside it.
 
-Tested and left out: chain count (slope 0.08 on the residuals) and listing age among tokens that trade. Fees and revenue are not in the snapshot, so the model does not use them. No protocol name is special-cased. Every coefficient is refitted from the snapshot each run and shown on the dashboard's Model view.
+### Held-out test (leave-one-out over the 128 trading tokens)
+
+Each token's market cap is predicted by a fit that never saw it (`validate` in `engine.js`, run on every load of the page):
+
+| Model | Median miss | Mean abs log10 error | Rank correlation |
+| --- | --- | --- | --- |
+| Flat multiple (median mcap ÷ TVL) | ×5.07 | 0.785 | 0.416 |
+| Size curve alone | ×3.40 | 0.693 | 0.404 |
+| **Size curve + sector, k = 8 (used)** | **×3.26** | **0.669** | **0.441** |
+| … + category inside the sector | ×3.55 | 0.678 | 0.419 |
+
+The category term raised the held-out error, so it is not in the model. Momentum and runway cannot be tested this way, since a trading token's value is not a launch: they stay small, stated adjustments.
+
+Fees and revenue are not in the snapshot, so the model does not use them. No protocol name is special-cased. Every coefficient is refitted from the snapshot each run and shown on the dashboard's Model view.
 
 ## Farm plans (`farmPlan` in `dashboard/engine.js`)
 
@@ -47,7 +60,9 @@ Implied values are this board's own estimate, not a forecast that any token will
 - **Board**: sortable columns; filters for segment, sector, chain, minimum TVL, runway and momentum; each row shows the value band and its farm plan.
 - **Detail** (`#/p/<slug>`): the value built step by step, the nearest trading peers, the protocol on the peer curve, the farm plan with cost and time per step, flags, and a pro-rata calculator.
 - **Trading peers** and **Set aside**: the protocols kept off the board, with the reason for each.
-- **Model**: the peer curve, every fitted coefficient, the sector effects, and a sandbox that re-runs the engine with other constants and shows which ranks move.
+- **Model**: the peer curve, every fitted coefficient, the held-out test, the sector effects with each sector's token record, and a sandbox that re-runs the engine with other constants and shows which ranks move.
+
+A strip under the summary re-checks the gate's rules on what the page renders: watchlist coverage, ranks 1 to N with values that never rise, slugs from the snapshot, no row with a token recorded, 3 to 12 farm steps.
 
 ## Run it
 

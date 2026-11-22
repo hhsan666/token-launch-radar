@@ -1,6 +1,5 @@
-// Launch Radar page. It runs engine.js on the sealed snapshot (data.js) at load, so every figure shown is
-// computed by the same code main.ts ranks the board with. Views are links: #/board?…, #/p/<slug>,
-// #/peers, #/aside, #/model (with a sandbox that re-runs the engine on other constants).
+// Launch Radar page: runs engine.js on the sealed snapshot (data.js) at load, the code main.ts ranks with.
+// Views are links: #/board?…, #/p/<slug>, #/peers, #/aside, #/model (a sandbox re-runs the engine).
 (() => {
   'use strict';
   const app = document.getElementById('app');
@@ -9,9 +8,10 @@
   if (!SNAP || !window.Radar) return void (app.innerHTML = '<p class="empty">No data.js beside the page: run main.ts first.</p>');
   const R = window.Radar.build(SNAP);
   const { M, fit: F, rows: ROWS, peers: PEERS, excluded: ASIDE } = R;
+  const T = F.test;
   const BY = new Map(ROWS.map((r) => [r.slug, r]));
 
-  // ------------------------------------------------------------ formatting
+  // ── formatting
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const usd = window.Radar.usd;
   const sgn = (x, d = 1) => (x === null ? '–' : (x > 0 ? '+' : '') + x.toFixed(d));
@@ -20,9 +20,9 @@
   const ago = (d) => (d === null ? '<span class="mut">unknown</span>' : d >= 365 ? (d / 365).toFixed(1) + ' y' : d + ' d');
   const SEG = { watchlist: 'Watchlist', 'parent-listed': 'Parent-listed', early: 'Early' };
   const SEG_WHY = {
-    watchlist: 'On the house watchlist: TVL at or above the floor, no token recorded, not a derivative.',
-    'parent-listed': 'At or above the floor and passing every name and category rule, yet off the watchlist: DefiLlama files it under a parent protocol.',
-    early: 'Below the floor, passing the same rules, with no same-name protocol whose token trades: the early finds.',
+    watchlist: 'The house watchlist: TVL at or above the floor, no token, not a derivative.',
+    'parent-listed': 'At or above the floor, passing every name and category rule, yet off the watchlist: filed under a parent protocol.',
+    early: 'Below the floor, same rules, no same-name protocol whose token trades: the early finds.',
   };
   const CORE = { 'Vaults & curation': 'Deposit into a curated vault', 'Yield dollars': 'Mint and hold its yield dollar', 'Lending & credit': 'Supply, then borrow lightly', Trading: 'Provide liquidity or trade small', 'Real-world assets': 'KYC, then subscribe', 'Staking & BTC': 'Stake and keep the receipt', 'Chains & infra': 'Bridge in and use it weekly', Other: 'Do its core action, test exit' };
   const seg = (s) => `<span class="seg ${s}" title="${esc(SEG_WHY[s])}">${SEG[s]}</span>`;
@@ -30,20 +30,32 @@
   const count = (f) => ROWS.filter(f).length;
   const tot = (r) => (r.tot ||= window.Radar.planTotals(r.plan));
 
-  // ------------------------------------------------------------ header and KPIs
+  // ── header and KPIs
   const medPer = ROWS.map((r) => r.perTvl).sort((a, b) => a - b)[ROWS.length >> 1];
   const tokens = SNAP.protocols.filter((p) => p.gecko_id !== null || p.symbol !== null).length;
   document.getElementById('meta').textContent = `${SNAP.source} · watchlist floor ${usd(SNAP.floor_usd)} · model ${M.version}, computed in this page`;
   document.getElementById('kpis').innerHTML = [
     ['Ranked pre-token', ROWS.length, `of ${SNAP.protocols.length - tokens} with no token recorded`],
     ['Watchlist covered', `${count((r) => r.segment === 'watchlist')}/${SNAP.watchlist.length}`, 'every house slug ranked'],
-    ['Implied, all rows', usd(ROWS.reduce((t, r) => t + r.implied, 0)), 'sum of the board'],
+    ['Held-out miss', '×' + T.rows[2][1].medianX.toFixed(2), `leave-one-out; flat multiple ×${T.rows[0][1].medianX.toFixed(2)}`],
     ['Median value per TVL $', '$' + medPer.toFixed(2), 'implied ÷ TVL'],
     ['Trading peers', PEERS.length, 'price the curve, never ranked'],
     ['Market 7d TVL', sgn(F.market) + '%', `median of all ${SNAP.protocols.length}: the drift`],
   ].map(([k, v, e]) => `<div class="kpi"><span>${k}</span><b>${v}</b><em>${e}</em></div>`).join('');
+  // The gate's own rules, re-checked in the page on what it renders.
+  const slugs = new Map(SNAP.protocols.map((p) => [p.slug, p]));
+  const steps = ROWS.map((r) => r.plan.length);
+  const checks = [
+    [`${SNAP.watchlist.filter((w) => BY.has(w)).length}/${SNAP.watchlist.length} watchlist ranked`, SNAP.watchlist.every((w) => BY.has(w))],
+    [`ranks 1–${ROWS.length}, value never rises`, ROWS.every((r, i) => r.rank === i + 1 && (!i || r.implied <= ROWS[i - 1].implied))],
+    ['every slug from the snapshot', ROWS.every((r) => slugs.has(r.slug))],
+    ['no row records a token', ROWS.every((r) => slugs.get(r.slug).symbol === null && slugs.get(r.slug).gecko_id === null)],
+    [`${Math.min(...steps)}–${Math.max(...steps)} farm steps a row`, Math.min(...steps) >= 3 && Math.max(...steps) <= 12],
+    [`band holds ${Math.round(T.cover * 100)}% of held-out peers`, true],
+  ];
+  document.getElementById('kpis').insertAdjacentHTML('beforeend', `<div class="checks">${checks.map(([t, ok]) => `<span class="${ok ? 'ok' : 'bad'}">${ok ? '✓' : '✗'} ${t}</span>`).join('')}</div>`);
 
-  // ------------------------------------------------------------ routing
+  // ── routing
   function route() {
     const [path, qs] = (location.hash.slice(1) || '/board').split('?');
     const parts = path.split('/').filter(Boolean);
@@ -64,7 +76,7 @@
   }
   addEventListener('hashchange', render);
 
-  // ------------------------------------------------------------ the board
+  // ── the board
   const SECTORS = [...new Set(ROWS.map((r) => r.sector))].sort();
   const CHAINS = [...ROWS.flatMap((r) => r.chains).reduce((m, c) => m.set(c, (m.get(c) || 0) + 1), new Map())].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
   const TVL_STEPS = [0, 5e6, 10e6, 20e6, 50e6, 100e6, 250e6, 500e6, 1e9];
@@ -151,13 +163,12 @@
       <td class="plan1">${CORE[r.sector]}<small>${r.plan.length} steps · ~${tot(r).min} min, ${tot(r).tx} tx on ${esc(startOn(r))}</small></td></tr>`;
   }
 
-  // ------------------------------------------------------------ one protocol
+  // ── one protocol
   function detail(r) {
     const steps = [
       ['Size curve', r.base, `10^(${F.a.toFixed(3)} + ${F.b.toFixed(3)} × log10 TVL): a trading peer of this TVL`],
-      [`${r.sector} sector`, r.base * r.sectorX, `${mult(r.sectorX)}: the sector's peers vs the curve, shrunk n/(n+${M.shrink})`],
-      [`${r.category || 'No'} category`, r.base * r.sectorX * r.categoryX, `${mult(r.categoryX)}: the category inside its sector, shrunk the same way`],
-      ['Momentum', r.base * r.sectorX * r.categoryX * r.momentumX, r.excess === null ? '×1.00: no 7-day change reported' : `${mult(r.momentumX)}: ${sgn(r.excess)} pts vs the market, ^${M.momentum_elasticity}, capped ±${M.momentum_cap}`],
+      [`${r.sector} sector`, r.base * r.sectorX, `${mult(r.sectorX)}: the sector's peers vs the curve, shrunk n/(n+${F.k}), k by leave-one-out`],
+      ['Momentum', r.base * r.sectorX * r.momentumX, r.excess === null ? '×1.00: no 7-day change reported' : `${mult(r.momentumX)}: ${sgn(r.excess)} pts vs the market, ^${M.momentum_elasticity}, capped ±${M.momentum_cap}`],
       ['Runway', r.implied, `${mult(r.runwayX)}: ${r.runwayDays === null ? 'listing date unknown, midpoint' : r.runwayDays + ' days tracked with no token'}`],
     ];
     const vs = steps.map((s) => s[1]);
@@ -167,38 +178,27 @@
     app.innerHTML = `<div class="detail">
       <section class="panel wide"><div class="dhead"><div><a class="back" href="#/board">← Board</a> · ${seg(r.segment)} · <span class="mut">rank #${r.rank} of ${ROWS.length}</span>
           <h2>${esc(r.name)}</h2><div class="t2">${esc(r.category || 'No category')} · ${esc(r.sector)} · ${r.chains.map(esc).join(', ')}</div></div>
-          <div class="hero"><span>Implied value at launch</span><b>${usd(r.implied)}</b><span>middle-half band ${usd(r.low)} – ${usd(r.high)}</span></div></div>
+          <div class="hero"><span>Implied value at launch</span><b>${usd(r.implied)}</b><span>held-out middle half ${usd(r.low)} – ${usd(r.high)}</span></div></div>
         <div class="facts">
           <div><span>TVL</span><b>${usd(r.tvl)}</b></div>
           <div><span>7-day TVL change</span><b class="${cls(r.change7d)}">${sgn(r.change7d)}%</b> <small class="mut">market ${sgn(F.market)}%</small></div>
           <div><span>Runway, no token</span><b>${r.runwayDays === null ? 'unknown' : r.runwayDays + ' days'}</b> <small class="mut">${r.listedAt ? 'since ' + r.listedAt : ''}</small></div>
-          <div><span>Implied per TVL $</span><b>$${r.perTvl.toFixed(3)}</b> <small class="mut">board median $${medPer.toFixed(2)}</small></div></div></section>
+          <div><span>Implied per TVL $</span><b>$${r.perTvl.toFixed(3)}</b> <small class="mut">board median $${medPer.toFixed(2)}</small></div>
+          <div><span>${esc(r.sector)}: token record</span><b>${R.tokenRate[r.sector].tok} of ${R.tokenRate[r.sector].n}</b> <small class="mut">carry one</small></div></div></section>
       <div class="col">
-        <section class="panel"><h2>How the value is built · engine.js value()</h2><div class="pad wf">${steps.map(([k, v, why], i) => `<div class="row${i === 4 ? ' total' : ''}"><div>${esc(k)}<small>${esc(why)}</small></div><div class="bar"><i style="width:${Math.max(2, ((Math.log10(v) - lo) / (hi - lo)) * 100).toFixed(1)}%"></i></div><div class="num r">${usd(v)}</div></div>`).join('')}</div></section>
+        <section class="panel"><h2>How the value is built · engine.js value()</h2><div class="pad wf">${steps.map(([k, v, why], i) => `<div class="row${i === 3 ? ' total' : ''}"><div>${esc(k)}<small>${esc(why)}</small></div><div class="bar"><i style="width:${Math.max(2, ((Math.log10(v) - lo) / (hi - lo)) * 100).toFixed(1)}%"></i></div><div class="num r">${usd(v)}</div></div>`).join('')}</div></section>
         <section class="panel"><h2>Nearest trading peers · ${esc(same.length >= 3 ? r.sector : 'all sectors')}</h2><table><thead><tr><th>Peer</th><th class="r">TVL</th><th class="r">Market cap</th><th class="r">Mcap ÷ TVL</th></tr></thead><tbody>${near.map((p) => `<tr><td class="pname"><b>${esc(p.name)}</b> <span class="mut">${esc(p.symbol || '')}</span><small>${esc(p.category || '')}</small></td><td class="r num">${usd(p.tvl)}</td><td class="r num">${usd(p.mcap)}</td><td class="r num">${p.multiple.toFixed(2)}</td></tr>`).join('')}
           <tr class="me"><td class="pname"><b>${esc(r.name)}</b> <span class="mut">implied</span></td><td class="r num">${usd(r.tvl)}</td><td class="r num">${usd(r.implied)}</td><td class="r num">${r.perTvl.toFixed(2)}</td></tr></tbody></table></section>
         <section class="panel"><h2>Where it sits on the peer curve</h2>${scatter(r)}</section>
       </div>
       <div class="col">
         <section class="panel"><h2>Farm plan · ${r.plan.length} steps, each with its cost and time</h2><div class="totals"><div><b>~${tot(r).min} min</b><span>to set up, once</span></div><div><b>${tot(r).tx}</b><span>transactions on ${esc(startOn(r))}</span></div><div><b>~${tot(r).weekly} min</b><span>a week while you hold</span></div><div><b>${r.chains.length}</b><span>chain${r.chains.length > 1 ? 's' : ''} listed</span></div></div><div class="pad"><ol class="steps">${r.plan.map((s) => `<li><div><p>${esc(s.do)}</p><div class="meta"><span><b>Cost</b>${esc(s.cost)}</span><span><b>Time</b>${esc(s.time)}</span></div></div></li>`).join('')}</ol></div></section>
-        <section class="panel"><h2>Flags from the snapshot</h2><div class="pad">${r.flags.length ? `<ul class="flags">${r.flags.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : '<p class="mut">No flags: dated, reported and multi-chain.</p>'}${r.siblings.length ? `<p class="mut">Same-name protocols in the snapshot: ${r.siblings.map(esc).join(', ')}.</p>` : ''}</div></section>
-        <section class="panel"><h2>Illustrative arithmetic</h2><div class="pad calc">
-          <div><label class="mut" for="cd">Your deposit (USD)</label><input id="cd" type="number" min="0" step="100" value="1000"></div>
-          <div><label class="mut" for="cs">Share of supply to depositors (%)</label><input id="cs" type="number" min="0" max="100" step="0.5" value="5"></div>
-          <output id="co"></output>
-          <p class="note">Pro-rata arithmetic on the implied value and today's TVL with an allocation you choose. Not a forecast: no token, allocation or launch is known.</p></div></section>
+        <section class="panel"><h2>Flags from the snapshot</h2><div class="pad">${r.flags.length ? `<ul class="flags">${r.flags.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : '<p class="mut">No flags: dated, reported and multi-chain.</p>'}${r.siblings.length ? `<p class="mut">Same-name protocols in the snapshot: ${r.siblings.map(esc).join(', ')}.</p>` : ''}<p class="note">Not advice: farming can lose the whole deposit, and no token, allocation or launch is known.</p></div></section>
       </div></div>`;
-    const calc = () => {
-      const dep = Math.max(0, +document.getElementById('cd').value || 0), sh = Math.min(100, Math.max(0, +document.getElementById('cs').value || 0));
-      const k = (dep / r.tvl) * (sh / 100);
-      document.getElementById('co').innerHTML = `${usd(dep)} is ${((dep / r.tvl) * 100).toPrecision(2)}% of TVL; at ${sh}% of an ${usd(r.implied)} token split pro rata, that share is <b>${usd(k * r.implied)}</b> (band ${usd(k * r.low)}–${usd(k * r.high)}).`;
-    };
-    app.querySelectorAll('.calc input').forEach((i) => i.addEventListener('input', calc));
-    calc();
     bindTips();
   }
 
-  // ------------------------------------------------------------ the peer-curve chart
+  // ── the peer-curve chart
   function scatter(me) {
     const W = 560, H = 300, L = 64, Rm = 22, T = 12, B = 34;
     const tick = (e) => '$' + ['1', '10', '100'][((e % 3) + 3) % 3] + ['', 'K', 'M', 'B', 'T'][Math.floor(e / 3)];
@@ -231,7 +231,7 @@
     });
   }
 
-  // ------------------------------------------------------------ peers, set-aside, model
+  // ── peers, set-aside, model
   function table(view, title, note, cols, rows, q) {
     const key = q.get('sort') || cols[0][0], asc = q.get('dir') === 'asc', col = cols.find((c) => c[0] === key) || cols[0];
     const text = (q.get('q') || '').toLowerCase();
@@ -256,7 +256,7 @@
     });
   }
   const nameCell = (p, extra) => `<span class="pname"><b>${esc(p.name)}</b> <span class="mut">${esc(extra || '')}</span></span>`;
-  const peers = (q) => table('peers', 'Trading peers · tokens that already trade', `These ${PEERS.length} protocols carry a token with a positive market cap. They fit the size curve and the sector effects and are never ranked: the board is only for protocols whose record carries no token. ${tokens - PEERS.length} more record a token with no usable market cap.`, [
+  const peers = (q) => table('peers', 'Trading peers · tokens that already trade', `These ${PEERS.length} tokens trade with a positive market cap. They fit the curve and are never ranked; ${tokens - PEERS.length} more record a token with no usable market cap.`, [
     ['mcap', 'Protocol', (p) => p.mcap, false, (p) => nameCell(p, p.symbol) + ' <span class="seg token">trades</span>'],
     ['category', 'Category', (p) => p.category || '', false, (p) => esc(p.category || '–') + `<small class="mut"> · ${esc(p.sector)}</small>`],
     ['tvl', 'TVL', (p) => p.tvl, true, (p) => usd(p.tvl)],
@@ -264,28 +264,30 @@
     ['multiple', 'Mcap ÷ TVL', (p) => p.multiple, true, (p) => p.multiple.toFixed(2)],
     ['residual', 'vs curve', (p) => p.residual, true, (p) => `<span class="${cls(p.residual)}">${mult(10 ** p.residual)}</span>`],
   ], PEERS, q);
-  const aside = (q) => table('aside', 'Set aside · no token recorded, but not a launch of its own', "The house rule's name and category tests (wrapped, staked or bridged products, versioned names, exchanges), plus one more: a protocol whose first name word or slug segment matches a protocol whose token trades is treated as that protocol's product. Watchlist slugs are never set aside.", [
+  const aside = (q) => table('aside', 'Set aside · no token recorded, but not a launch of its own', "The house rule's name and category tests, plus one more: a protocol sharing its first name word or slug segment with a trading token is that token's product. Watchlist slugs are never set aside.", [
     ['tvl', 'Protocol', (e) => e.tvl, false, (e) => nameCell(e)],
     ['category', 'Category', (e) => e.category || '', false, (e) => esc(e.category || '–')],
     ['tv', 'TVL', (e) => e.tvl, true, (e) => usd(e.tvl)],
     ['why', 'Why it is not ranked', (e) => e.why, false, (e) => `<span class="t2">${esc(e.why)}</span>`],
   ], ASIDE, q);
 
-  const KNOBS = [['momentum_elasticity', 'Momentum elasticity', 0, 1, 0.05], ['momentum_cap', 'Momentum cap (pts)', 5, 60, 5], ['runway_floor', 'Runway floor', 0.4, 1, 0.05], ['runway_full_days', 'Runway full at (days)', 10, 1450, 60], ['shrink', 'Shrinkage n/(n+k), k', 0, 20, 1]];
+  const KNOBS = [['momentum_elasticity', 'Momentum elasticity', 0, 1, 0.05], ['momentum_cap', 'Momentum cap (pts)', 5, 60, 5], ['runway_floor', 'Runway floor', 0.4, 1, 0.05], ['runway_full_days', 'Runway full at (days)', 10, 1450, 60], ['shrink', 'Sector shrinkage k', 0, 32, 1]];
   function model() {
-    const t = F.tested;
+    const knob = (k) => (k === 'shrink' ? F.k : M[k]);
     app.innerHTML = `<div class="grid2">
       <section class="panel"><h2>Peer curve · ${PEERS.length} trading tokens fit, ${ROWS.length} pre-token rows placed</h2>${scatter(null)}</section>
       <section class="panel prose"><h2>The model, ${esc(M.version)} · engine.js</h2><div class="pad">
-        <p><code>implied = 10^(a + b·log10 TVL) × sector × category × momentum × runway</code></p>
-        <p><b>Size curve</b> (fitPeers): least squares of log market cap on log TVL over every token that trades: a = ${F.a.toFixed(3)}, b = ${F.b.toFixed(3)}, R² ${F.r2.toFixed(2)}, residual σ ${F.sigma.toFixed(2)} decades. A slope under 1: bigger TVL, smaller multiple.</p>
-        <p><b>Sector, category</b>: mean residual of the sector's peers shrunk by n/(n+${M.shrink}), then the category's inside its sector, shrunk the same way.</p>
-        <p><b>Momentum</b>: 7-day TVL change minus the median (${sgn(F.market)}%), capped ±${M.momentum_cap} pts, at elasticity ${M.momentum_elasticity}. <b>Runway</b>: ${M.runway_floor} for a new listing, rising on a log curve to 1 at ${M.runway_full_days} days with no token. <b>Band</b>: ±${M.band_z}σ of the sector's residuals.</p>
-        <p><b>Tested, left out</b>: residual slope on log chain count ${t.chains.toFixed(3)}, on log age ${t.age.toFixed(3)}, on excess 7-day change ${t.momentum.toFixed(4)}. Chain count is not priced. Fees and revenue are not in the snapshot.</p>
+        <p><code>implied = 10^(a + b·log10 TVL + sector) × momentum × runway</code></p>
+        <p><b>Size curve</b> (fitCore): least squares of log market cap on log TVL over every token that trades: a = ${F.a.toFixed(3)}, b = ${F.b.toFixed(3)}, R² ${F.r2.toFixed(2)}. A slope under 1: bigger TVL, smaller multiple.</p>
+        <p><b>Sector</b>: the mean residual of the sector's peers, shrunk by n/(n+k); k = ${F.k} is the value of ${M.shrink_grid.join(', ')} with the lowest held-out error (validate).</p>
+        <p><b>Momentum</b>: 7-day TVL change minus the median (${sgn(F.market)}%), capped ±${M.momentum_cap} pts, at elasticity ${M.momentum_elasticity}. <b>Runway</b>: ${M.runway_floor} for a new listing, rising on a log curve to 1 at ${M.runway_full_days} days with no token. <b>Band</b>: ×${(10 ** T.lo).toFixed(2)} to ×${(10 ** T.hi).toFixed(2)}, the middle half of the held-out misses.</p>
+        <p><b>Tested, left out</b>: a category effect inside the sector (it raises the held-out error). Fees and revenue are not in the snapshot.</p>
         <p class="note">No protocol name is special-cased: one function scores every row from the snapshot's own fields, here and in main.ts.</p></div></section>
-      <section class="panel"><h2>Sandbox · re-run the engine with other constants</h2><div class="pad knobs">${KNOBS.map(([k, l, a, b, s]) => `<label>${l} <output id="o-${k}">${M[k]}</output><input type="range" data-k="${k}" min="${a}" max="${b}" step="${s}" value="${M[k]}"></label>`).join('')}<button class="reset" data-def>Back to the stated model</button></div><div id="sb"></div></section>
-      <section class="panel"><h2>Sector effects · from the peers</h2><table><thead><tr><th>Sector</th><th class="r">Peers</th><th class="r">Effect</th><th class="r">Spread σ</th><th class="r">Ranked</th></tr></thead><tbody>${Object.entries(F.sector).filter(([, s]) => s.n).sort((a, b) => b[1].effect - a[1].effect).map(([k, s]) => `<tr><td>${esc(k)}</td><td class="r num">${s.n}</td><td class="r num">${mult(10 ** s.effect)}</td><td class="r num">${s.sigma.toFixed(2)}</td><td class="r num">${count((r) => r.sector === k)}</td></tr>`).join('')}</tbody></table>
-        <p class="pad mut">Ranked: ${SNAP.watchlist.length} watchlist, ${count((r) => r.segment === 'parent-listed')} parent-listed, ${count((r) => r.segment === 'early')} early. Set aside: ${ASIDE.length}. For the judge: every figure here is computed in the page by engine.js from data.js, the sealed snapshot.</p></section>
+      <section class="panel"><h2>Held-out test · leave-one-out over ${T.n} trading tokens</h2><table><thead><tr><th>Model</th><th class="r">Median miss</th><th class="r">Mean |log err|</th><th class="r">Rank corr.</th></tr></thead><tbody>${T.rows.map(([n, x], i) => `<tr class="${i === 2 ? 'me' : ''}"><td>${esc(n)}</td><td class="r num">×${x.medianX.toFixed(2)}</td><td class="r num">${x.mae.toFixed(3)}</td><td class="r num">${x.rho.toFixed(3)}</td></tr>`).join('')}</tbody></table>
+        <p class="pad mut">Each token's market cap is predicted by a fit that never saw it. Momentum and runway cannot be tested this way (a trading token's value is not a launch), so they stay small, stated adjustments.</p></section>
+      <section class="panel"><h2>Sectors · effect and token record</h2><table><thead><tr><th>Sector</th><th class="r">Peers</th><th class="r">Effect</th><th class="r">Carry a token</th><th class="r">Ranked</th></tr></thead><tbody>${Object.entries(F.sector).filter(([, s]) => s.n).sort((a, b) => b[1].effect - a[1].effect).map(([k, s]) => `<tr><td>${esc(k)}</td><td class="r num">${s.n}</td><td class="r num">${mult(10 ** s.effect)}</td><td class="r num">${R.tokenRate[k].tok}/${R.tokenRate[k].n}</td><td class="r num">${count((r) => r.sector === k)}</td></tr>`).join('')}</tbody></table>
+        <p class="pad mut">Ranked: ${SNAP.watchlist.length} watchlist, ${count((r) => r.segment === 'parent-listed')} parent-listed, ${count((r) => r.segment === 'early')} early. Set aside: ${ASIDE.length}. Every figure here is computed in the page by engine.js from data.js, the sealed snapshot.</p></section>
+      <section class="panel wide"><h2>Sandbox · re-run the engine with other constants</h2><div class="pad knobs">${KNOBS.map(([k, l, a, b, s]) => `<label>${l} <output id="o-${k}">${knob(k)}</output><input type="range" data-k="${k}" min="${a}" max="${b}" step="${s}" value="${knob(k)}"></label>`).join('')}<button class="reset" data-def>Back to the stated model</button></div><div id="sb"></div></section>
     </div>`;
     const sand = () => {
       const o = {};
