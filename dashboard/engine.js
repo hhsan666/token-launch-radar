@@ -144,40 +144,42 @@
   const usd = (n) => (n >= 1e9 ? '$' + (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? '$' + (n / 1e6).toFixed(n >= 1e8 ? 0 : 1) + 'M' : n >= 1e3 ? '$' + (n / 1e3).toFixed(0) + 'K' : '$' + Math.round(n));
   const pct = (x) => x.toFixed(Math.max(2, 1 - Math.floor(Math.log10(x)))) + '%';
   const gas = (c) => (c === 'Ethereum' ? 'Ethereum mainnet gas (the costliest tier)' : c === 'Bitcoin' ? 'a Bitcoin on-chain fee (varies with mempool load)' : `${c} gas (a low-fee chain)`);
-  const step = (d, cost, time) => ({ do: d, cost, time });
+  // Each step also carries its numbers: minutes to do once, on-chain transactions, minutes a week after.
+  const step = (d, cost, time, min = 0, tx = 0, weekly = 0) => ({ do: d, cost, time, min, tx, weekly });
+  const planTotals = (plan) => plan.reduce((t, s) => ({ min: t.min + s.min, tx: t.tx + s.tx, weekly: t.weekly + s.weekly }), { min: 0, tx: 0, weekly: 0 });
 
   function coreSteps(p, sector, ch) {
     const g = gas(ch), n = p.name;
     switch (sector) {
       case 'Vaults & curation': return [
-        step(`Pick one ${n} vault on ${ch} whose deposit asset you already hold (a stablecoin or ETH-type asset). Read its strategy page: which markets it allocates to, its fee, and whether withdrawals are instant or queued.`, 'free (reading)', '~15 min'),
-        step('Deposit into that vault: approve the asset, then deposit. Start with a test amount, withdraw it once to confirm the exit path works, then deposit the size you chose.', `${g}: 2 transactions to enter, 1 to test the exit`, '~10 min'),
-        step('Check the vault\'s allocation weekly: a curator moves deposits between markets, so the risk you hold changes without a transaction of yours.', 'free', '~5 min a week')];
+        step(`Pick one ${n} vault on ${ch} whose deposit asset you already hold (a stablecoin or ETH-type asset). Read its strategy page: which markets it allocates to, its fee, and whether withdrawals are instant or queued.`, 'free (reading)', '~15 min', 15, 0, 0),
+        step('Deposit into that vault: approve the asset, then deposit. Start with a test amount, withdraw it once to confirm the exit path works, then deposit the size you chose.', `${g}: 2 transactions to enter, 1 to test the exit`, '~10 min', 10, 3, 0),
+        step('Check the vault\'s allocation weekly: a curator moves deposits between markets, so the risk you hold changes without a transaction of yours.', 'free', '~5 min a week', 0, 0, 5)];
       case 'Yield dollars': return [
-        step(`Get the stablecoin ${n} accepts for minting or depositing on ${ch} (its docs list them) and read how redemption works: instant, queued or with a cooldown.`, `a swap fee if you must convert, plus ${g}`, '~15 min'),
-        step(`Mint or deposit into ${n}'s yield-bearing dollar with a test amount, redeem it back once, then deposit your chosen size and keep the receipt token in the same wallet.`, `${g}: about 4 transactions (approve, mint, redeem test, mint)`, '~20 min'),
-        step('If the app lists integrations (lending markets or pools that accept its dollar), use at most one, and only after reading that integration\'s own risk notes.', `${g} per integration step`, '~15 min')];
+        step(`Get the stablecoin ${n} accepts for minting or depositing on ${ch} (its docs list them) and read how redemption works: instant, queued or with a cooldown.`, `a swap fee if you must convert, plus ${g}`, '~15 min', 15, 1, 0),
+        step(`Mint or deposit into ${n}'s yield-bearing dollar with a test amount, redeem it back once, then deposit your chosen size and keep the receipt token in the same wallet.`, `${g}: about 4 transactions (approve, mint, redeem test, mint)`, '~20 min', 20, 4, 0),
+        step('If the app lists integrations (lending markets or pools that accept its dollar), use at most one, and only after reading that integration\'s own risk notes.', `${g} per integration step`, '~15 min', 15, 1, 0)];
       case 'Lending & credit': return [
-        step(`Supply a major asset (a stablecoin or ETH-type asset) to ${n} on ${ch}. Supplying alone carries no liquidation risk on your side; check the market's utilisation before you size it.`, `${g}: approve + supply`, '~10 min'),
-        step('Optionally borrow a small amount against it and keep the loan-to-value far below the liquidation threshold the app shows (a quarter of it is a cautious level). Lending point schemes often count both sides, but a borrow can be liquidated.', `${g}: 1 borrow; interest on the loan`, '~5 min, then a daily glance'),
-        step('Set a price alert on your collateral, or skip borrowing entirely if you cannot watch it.', 'free', '~5 min')];
+        step(`Supply a major asset (a stablecoin or ETH-type asset) to ${n} on ${ch}. Supplying alone carries no liquidation risk on your side; check the market's utilisation before you size it.`, `${g}: approve + supply`, '~10 min', 10, 2, 0),
+        step('Optionally borrow a small amount against it and keep the loan-to-value far below the liquidation threshold the app shows (a quarter of it is a cautious level). Lending point schemes often count both sides, but a borrow can be liquidated.', `${g}: 1 borrow; interest on the loan`, '~5 min, then a daily glance', 5, 1, 0),
+        step('Set a price alert on your collateral, or skip borrowing entirely if you cannot watch it.', 'free', '~5 min', 5, 0, 0)];
       case 'Trading': return [
-        step(`Fund ${n} on ${ch} with a small trading balance. If it is an exchange of pools, add liquidity to its deepest major pair instead of trading: fees accrue to you while you hold the position.`, `${g}: deposit or add-liquidity transactions; impermanent loss on a pool`, '~15 min'),
-        step('If you trade, keep leverage at 2x or less and trade only pairs you would trade anyway: volume-based points rarely pay for fees and slippage on forced trades.', 'trading fees and slippage on each trade', 'a few trades a week'),
-        step('Keep a fee log (date, size, fee) so you can compare what farming costs with anything it later earns.', 'free', '~5 min a week')];
+        step(`Fund ${n} on ${ch} with a small trading balance. If it is an exchange of pools, add liquidity to its deepest major pair instead of trading: fees accrue to you while you hold the position.`, `${g}: deposit or add-liquidity transactions; impermanent loss on a pool`, '~15 min', 15, 2, 0),
+        step('If you trade, keep leverage at 2x or less and trade only pairs you would trade anyway: volume-based points rarely pay for fees and slippage on forced trades.', 'trading fees and slippage on each trade', 'a few trades a week', 0, 0, 15),
+        step('Keep a fee log (date, size, fee) so you can compare what farming costs with anything it later earns.', 'free', '~5 min a week', 0, 0, 5)];
       case 'Real-world assets': return [
-        step(`Check eligibility first: real-world-asset products often require identity checks (KYC), a jurisdiction list and a minimum ticket. Read ${n}'s terms before moving funds.`, 'free; your identity documents if KYC applies', '~30 min, plus any review time'),
-        step(`Subscribe with a test amount on ${ch}, note the redemption schedule (daily, weekly or monthly windows are common), then subscribe your chosen size.`, `${g}; any subscription fee the terms state`, '~20 min'),
-        step('Diarise the next redemption window: capital in an RWA product can be slower to exit than a DeFi pool.', 'free', '~5 min')];
+        step(`Check eligibility first: real-world-asset products often require identity checks (KYC), a jurisdiction list and a minimum ticket. Read ${n}'s terms before moving funds.`, 'free; your identity documents if KYC applies', '~30 min, plus any review time', 30, 0, 0),
+        step(`Subscribe with a test amount on ${ch}, note the redemption schedule (daily, weekly or monthly windows are common), then subscribe your chosen size.`, `${g}; any subscription fee the terms state`, '~20 min', 20, 2, 0),
+        step('Diarise the next redemption window: capital in an RWA product can be slower to exit than a DeFi pool.', 'free', '~5 min', 5, 0, 0)];
       case 'Staking & BTC': return [
-        step(`Stake or deposit the asset ${n} supports on ${ch}. Read the unbonding or withdrawal delay before you deposit: it is how long your capital is locked when you want out.`, `${g}: approve + stake`, '~10 min, plus the unbonding delay to exit'),
-        step('Keep the receipt token in the same wallet; moving it elsewhere can drop you from any points tracking.', 'free', '~2 min')];
+        step(`Stake or deposit the asset ${n} supports on ${ch}. Read the unbonding or withdrawal delay before you deposit: it is how long your capital is locked when you want out.`, `${g}: approve + stake`, '~10 min, plus the unbonding delay to exit', 10, 2, 0),
+        step('Keep the receipt token in the same wallet; moving it elsewhere can drop you from any points tracking.', 'free', '~2 min', 2, 0, 0)];
       case 'Chains & infra': return [
-        step(`Bridge a small balance to ${ch} through the official bridge its docs name, and keep enough of the native gas token for a few weeks of activity.`, `bridge fee plus ${g}`, '~20 min (bridges can take longer to settle)'),
-        step(`Use ${n} for what it is built for (payments, transfers or the apps on it), spread over several weeks rather than one burst: networks tend to look at sustained use, not a single day.`, `${g} per transaction`, '~10 min a week')];
+        step(`Bridge a small balance to ${ch} through the official bridge its docs name, and keep enough of the native gas token for a few weeks of activity.`, `bridge fee plus ${g}`, '~20 min (bridges can take longer to settle)', 20, 1, 0),
+        step(`Use ${n} for what it is built for (payments, transfers or the apps on it), spread over several weeks rather than one burst: networks tend to look at sustained use, not a single day.`, `${g} per transaction`, '~10 min a week', 0, 0, 10)];
       default: return [
-        step(`Read ${n}'s documentation to find its core action (deposit, stake, trade or use), do it once with a test amount on ${ch}, and exit once to prove the way out.`, `${g}: about 3 transactions`, '~20 min'),
-        step('Repeat the core action with your chosen size and keep the position in one wallet.', g, '~10 min')];
+        step(`Read ${n}'s documentation to find its core action (deposit, stake, trade or use), do it once with a test amount on ${ch}, and exit once to prove the way out.`, `${g}: about 3 transactions`, '~20 min', 20, 3, 0),
+        step('Repeat the core action with your chosen size and keep the position in one wallet.', g, '~10 min', 10, 1, 0)];
     }
   }
 
@@ -186,16 +188,16 @@
     const list = p.chains.length > 3 ? `${p.chains.slice(0, 3).join(', ')} and ${p.chains.length - 3} more` : p.chains.join(', ');
     const d7 = p.change_7d === null ? 'by an unreported amount' : (p.change_7d >= 0 ? '+' : '') + p.change_7d.toFixed(1) + '%';
     const plan = [
-      step(`Find ${p.name}'s official app through its DefiLlama listing (slug ${p.slug}) and confirm the domain on the team's own announcement channel before connecting a wallet. Never follow links from replies or DMs.`, 'free', '~10 min'),
-      step(`Use a dedicated wallet that holds only what you plan to deposit. ${p.name} is listed on ${list}; start on ${ch}${p.chains.length > 1 ? ' unless the product you want lives only elsewhere' : ''}.`, `${p.chains.length > 1 ? 'one transfer or bridge' : 'one transfer'} to ${ch} plus ${gas(ch)}`, '~10 min'),
-      step(`Size the position from the snapshot: TVL is ${usd(p.tvl_usd)}, so $1,000 is ${pct((1e3 / p.tvl_usd) * 100)} of the pool and $10,000 is ${pct((1e4 / p.tvl_usd) * 100)}. Choose an amount you can afford to lose entirely.`, 'free (arithmetic)', '~5 min'),
+      step(`Find ${p.name}'s official app through its DefiLlama listing (slug ${p.slug}) and confirm the domain on the team's own announcement channel before connecting a wallet. Never follow links from replies or DMs.`, 'free', '~10 min', 10, 0, 0),
+      step(`Use a dedicated wallet that holds only what you plan to deposit. ${p.name} is listed on ${list}; start on ${ch}${p.chains.length > 1 ? ' unless the product you want lives only elsewhere' : ''}.`, `${p.chains.length > 1 ? 'one transfer or bridge' : 'one transfer'} to ${ch} plus ${gas(ch)}`, '~10 min', 10, 1, 0),
+      step(`Size the position from the snapshot: TVL is ${usd(p.tvl_usd)}, so $1,000 is ${pct((1e3 / p.tvl_usd) * 100)} of the pool and $10,000 is ${pct((1e4 / p.tvl_usd) * 100)}. Choose an amount you can afford to lose entirely.`, 'free (arithmetic)', '~5 min', 5, 0, 0),
       ...coreSteps(p, sector, ch),
-      step(`Log every deposit (date, amount, transaction hash) and check the app for a points or rewards page. Hold for weeks, not days: programs that reward deposits usually weight time as well as size.`, `opportunity cost of the capital while it sits in ${p.name}`, '~5 min a week, for 4 weeks or more'),
-      step(`Set an exit rule now: its TVL moved ${d7} in the snapshot week against a market median of ${market.toFixed(1)}%. Withdraw if TVL falls sharply in a week, the terms change, or an exploit is reported.`, `${gas(ch)} for the withdrawal`, '~5 min'),
-      step('If a token is ever announced, claim only through the official app, read every signature request, and decide your sell-or-hold rule before claiming. Nothing here says a token will launch.', `${gas(ch)} for the claim`, '~10 min'),
+      step(`Log every deposit (date, amount, transaction hash) and check the app for a points or rewards page. Hold for weeks, not days: programs that reward deposits usually weight time as well as size.`, `opportunity cost of the capital while it sits in ${p.name}`, '~5 min a week, for 4 weeks or more', 0, 0, 5),
+      step(`Set an exit rule now: its TVL moved ${d7} in the snapshot week against a market median of ${market.toFixed(1)}%. Withdraw if TVL falls sharply in a week, the terms change, or an exploit is reported.`, `${gas(ch)} for the withdrawal`, '~5 min', 5, 0, 0),
+      step('If a token is ever announced, claim only through the official app, read every signature request, and decide your sell-or-hold rule before claiming. Nothing here says a token will launch.', `${gas(ch)} for the claim`, '~10 min', 0, 0, 0),
     ];
     if (v.runwayDays !== null && v.runwayDays < 120)
-      plan.splice(3, 0, step(`Its DefiLlama record is ${v.runwayDays} days old: young TVL can leave as fast as it came. Start smaller than on an older protocol and add only after a few weeks of stable TVL.`, 'free', 'decide now; revisit in 2 to 4 weeks'));
+      plan.splice(3, 0, step(`Its DefiLlama record is ${v.runwayDays} days old: young TVL can leave as fast as it came. Start smaller than on an older protocol and add only after a few weeks of stable TVL.`, 'free', 'decide now; revisit in 2 to 4 weeks', 0, 0, 0));
     return plan;
   }
   const stepText = (s) => `${s.do} Cost: ${s.cost}. Time: ${s.time}.`.slice(0, 600).trim();
@@ -246,7 +248,7 @@
     return { M, fit, rows, excluded, peers: fit.peers };
   }
 
-  const api = { MODEL, SECTORS, build, sectorOf, ruleExclusion, families, fitPeers, value, farmPlan, stepText, usd };
+  const api = { MODEL, SECTORS, build, planTotals, sectorOf, ruleExclusion, families, fitPeers, value, farmPlan, stepText, usd };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.Radar = api;
 })(typeof globalThis === 'object' ? globalThis : this);

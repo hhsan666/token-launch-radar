@@ -49,7 +49,7 @@ interface Row {
   low: number;
   high: number;
   perTvl: number;
-  plan: { do: string; cost: string; time: string }[];
+  plan: { do: string; cost: string; time: string; min: number; tx: number; weekly: number }[];
 }
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -85,6 +85,9 @@ const board = radar.rows.map((r) => ({
   implied_low_usd: r.low,
   implied_high_usd: r.high,
   value_per_tvl_dollar: Number(r.perTvl.toFixed(4)),
+  farm_setup_minutes: engine.planTotals(r.plan).min as number,
+  farm_setup_transactions: engine.planTotals(r.plan).tx as number,
+  farm_weekly_minutes: engine.planTotals(r.plan).weekly as number,
 }));
 
 /** The gate's board checks, run before anything is written: a refused board never leaves this program. */

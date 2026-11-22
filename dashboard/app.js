@@ -28,6 +28,7 @@
   const seg = (s) => `<span class="seg ${s}" title="${esc(SEG_WHY[s])}">${SEG[s]}</span>`;
   const startOn = (r) => r.chains.find((c) => c !== 'Ethereum' && c !== 'Bitcoin') || r.chains[0];
   const count = (f) => ROWS.filter(f).length;
+  const tot = (r) => (r.tot ||= window.Radar.planTotals(r.plan));
 
   // ------------------------------------------------------------ header and KPIs
   const medPer = ROWS.map((r) => r.perTvl).sort((a, b) => a - b)[ROWS.length >> 1];
@@ -147,7 +148,7 @@
       <td class="r num">${ago(r.runwayDays)}</td>
       <td class="vcell"><span class="num">${usd(r.implied)}</span><small class="mut num">${usd(r.low)} – ${usd(r.high)}</small><div class="band"><i style="left:${pos(r.low)}%;width:${(pos(r.high) - pos(r.low)).toFixed(1)}%"></i><b style="left:calc(${pos(r.implied)}% - 1px)"></b></div></td>
       <td class="r num">$${r.perTvl.toFixed(2)}</td>
-      <td class="plan1">${CORE[r.sector]}<small>${r.plan.length} steps · start on ${esc(startOn(r))}</small></td></tr>`;
+      <td class="plan1">${CORE[r.sector]}<small>${r.plan.length} steps · ~${tot(r).min} min, ${tot(r).tx} tx on ${esc(startOn(r))}</small></td></tr>`;
   }
 
   // ------------------------------------------------------------ one protocol
@@ -179,7 +180,7 @@
         <section class="panel"><h2>Where it sits on the peer curve</h2>${scatter(r)}</section>
       </div>
       <div class="col">
-        <section class="panel"><h2>Farm plan · ${r.plan.length} steps, each with its cost and time</h2><div class="pad"><ol class="steps">${r.plan.map((s) => `<li><div><p>${esc(s.do)}</p><div class="meta"><span><b>Cost</b>${esc(s.cost)}</span><span><b>Time</b>${esc(s.time)}</span></div></div></li>`).join('')}</ol></div></section>
+        <section class="panel"><h2>Farm plan · ${r.plan.length} steps, each with its cost and time</h2><div class="totals"><div><b>~${tot(r).min} min</b><span>to set up, once</span></div><div><b>${tot(r).tx}</b><span>transactions on ${esc(startOn(r))}</span></div><div><b>~${tot(r).weekly} min</b><span>a week while you hold</span></div><div><b>${r.chains.length}</b><span>chain${r.chains.length > 1 ? 's' : ''} listed</span></div></div><div class="pad"><ol class="steps">${r.plan.map((s) => `<li><div><p>${esc(s.do)}</p><div class="meta"><span><b>Cost</b>${esc(s.cost)}</span><span><b>Time</b>${esc(s.time)}</span></div></div></li>`).join('')}</ol></div></section>
         <section class="panel"><h2>Flags from the snapshot</h2><div class="pad">${r.flags.length ? `<ul class="flags">${r.flags.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : '<p class="mut">No flags: dated, reported and multi-chain.</p>'}${r.siblings.length ? `<p class="mut">Same-name protocols in the snapshot: ${r.siblings.map(esc).join(', ')}.</p>` : ''}</div></section>
         <section class="panel"><h2>Illustrative arithmetic</h2><div class="pad calc">
           <div><label class="mut" for="cd">Your deposit (USD)</label><input id="cd" type="number" min="0" step="100" value="1000"></div>
