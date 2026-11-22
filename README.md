@@ -18,7 +18,9 @@
 | Set aside (not ranked) | wrapped, staked or bridged products, versioned names, exchanges, and protocols sharing a name with a trading token | 150 |
 | Trading peers (not ranked) | tokens with a positive market cap: they price the model | 128 |
 
-## The value model (`lib/model.ts`)
+## The value model (`dashboard/engine.js`)
+
+One plain-JavaScript file holds the whole model and the farm plans. `main.ts` imports it to write `board.json`, and the dashboard runs the same file on the same snapshot in the browser, so the page, the screenshots and the board cannot disagree.
 
 ```
 implied = 10^(a + b·log10 TVL) × sector × category × momentum × runway
@@ -32,7 +34,7 @@ implied = 10^(a + b·log10 TVL) × sector × category × momentum × runway
 
 Tested and left out: chain count (slope 0.08 on the residuals) and listing age among tokens that trade. Fees and revenue are not in the snapshot, so the model does not use them. No protocol name is special-cased. Every coefficient is refitted from the snapshot each run and shown on the dashboard's Model view.
 
-## Farm plans (`lib/farm.ts`)
+## Farm plans (`farmPlan` in `dashboard/engine.js`)
 
 8 to 10 steps per protocol, each with **what it costs** (which gas tier, how many transactions, fees, opportunity cost) and **how long it takes**. The steps follow the protocol's sector (curated vaults, yield dollars, lending, trading, RWA, staking, chains) and its own snapshot facts: the chains it lists, its TVL (with the share of the pool a $1,000 or $10,000 deposit is), its 7-day change against the market, and how long it has been tracked. No URL, date or figure the snapshot does not carry is made up.
 
@@ -40,11 +42,12 @@ Implied values are this board's own estimate, not a forecast that any token will
 
 ## The dashboard
 
-`dashboard/` is plain HTML, CSS and JavaScript with no framework, no external file and no network. It reads `data.js`, which `main.ts` writes beside it. Views (each one a link through the URL hash):
+`dashboard/` is plain HTML, CSS and JavaScript with no framework, no external file and no network. `main.ts` writes the sealed snapshot beside it as `data.js`, and the page runs `engine.js` on it at load. Views (each one a link through the URL hash):
 
 - **Board**: sortable columns; filters for segment, sector, chain, minimum TVL, runway and momentum; each row shows the value band and its farm plan.
 - **Detail** (`#/p/<slug>`): the value built step by step, the nearest trading peers, the protocol on the peer curve, the farm plan with cost and time per step, flags, and a pro-rata calculator.
-- **Trading peers**, **Set aside** and **Model**: the protocols kept off the board, and every fitted coefficient.
+- **Trading peers** and **Set aside**: the protocols kept off the board, with the reason for each.
+- **Model**: the peer curve, every fitted coefficient, the sector effects, and a sandbox that re-runs the engine with other constants and shows which ranks move.
 
 ## Run it
 

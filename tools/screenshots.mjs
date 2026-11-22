@@ -25,7 +25,7 @@ const MAX = 350 * 1024;
 const SHOTS = [
   ['1-board', '#/board'],
   ['2-detail', null], // filled with the top watchlist row's slug below
-  ['3-filtered', '#/board?seg=early,parent-listed&beat=1&sort=m&dir=desc'],
+  ['3-filtered', '#/board?seg=early,parent-listed&beat=1&sort=perTvl&dir=desc'],
 ];
 
 const browser = await chromium.launch();
@@ -43,7 +43,7 @@ page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 
 await page.goto(page0 + '#/board');
-const detailSlug = process.env.DETAIL_SLUG || (await page.evaluate(() => window.RADAR.rows.find((r) => r.seg === 'watchlist').s));
+const detailSlug = process.env.DETAIL_SLUG || (await page.evaluate(() => window.Radar.build(window.SNAPSHOT).rows.find((r) => r.segment === 'watchlist').slug));
 SHOTS[1][1] = '#/p/' + encodeURIComponent(detailSlug);
 
 mkdirSync(shotDir, { recursive: true });
